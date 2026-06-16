@@ -1,20 +1,20 @@
-# Edge Case: 成绩超出有效范围
+# Edge Case: Mark Out of Valid Range
 
-## 识别的边界情况
+## What's the edge case?
 
-当通过 `POST /students` 创建学生或 `PUT /students/<id>` 更新学生时，如果提供的 `mark` 值不是 0 到 100 之间的整数（例如 -5、150、或浮点数 85.5），系统应该拒绝该请求。
+The spec says `mark` is optional when creating a student, but it doesn't say anything about what happens if someone passes in a mark that doesn't make sense — like `-10`, `150`, or even `85.5`. These are technically valid JSON numbers, so without explicit validation, they'd get written straight into the database without any complaints.
 
-## 处理方式
+## How I handled it
 
-在 `create_student` 和 `update_student` 两个接口中，对 `mark` 字段进行了以下验证：
+In both `POST /students` and `PUT /students/<id>`, I added a check before inserting or updating anything in the database:
 
 ```python
 if not isinstance(mark, int) or mark < 0 or mark > 100:
     return jsonify({"error": "Mark must be an integer between 0 and 100"}), 404
 ```
 
-如果 `mark` 不满足条件，返回 404 错误和描述性错误信息，不会写入数据库。
+So if the mark is a float, negative, or over 100, the request gets rejected with a 404 and a clear error message. Nothing gets written to the database.
 
-## 原因
+## Why I handled it this way
 
-成绩系统中分数通常有明确的上下限（0-100），允许超出范围的分数写入数据库会导致数据不一致，影响 `/stats` 接口计算出的统计数据（如平均分、最大值等）的准确性。通过在写入前验证，可以保证数据库中的数据始终合法。
+Student marks should always be whole numbers between 0 and 100 — that's just how grading works. If we let garbage values in, the `/stats` endpoint would start returning a meaningless average or a max of 999, which defeats the whole purpose. Catching it early at the API layer keeps the database clean and makes debugging a lot easier down the line.
